@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zipa-cli"
+version = "0.1.0"
+description = "Batch phonetic decoding CLI for ZIPA zipformer phone-recognition models (ONNX + PyTorch backends)."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "Apache-2.0" }
+authors = [{ name = "ZIPA CLI" }]
+keywords = ["phonetics", "ipa", "speech", "zipformer", "asr", "onnx", "icefall"]
+
+# Minimal install: the ONNX backend only. This is the default path of the CLI.
+dependencies = [
+    "numpy",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+# Minimal-deps inference path (recommended default). Lets you decode with the
+# exported ONNX models without torch / icefall / k2.
+onnx = [
+    "onnxruntime",
+    "soundfile",
+    "librosa",
+    "lhotse",
+    "huggingface_hub",
+    "sentencepiece",
+]
+# Full GPU path: PyTorch checkpoints. Requires icefall + k2 installed separately
+# (they must match your torch/cuda versions; see the ZIPA README).
+torch = [
+    "torch",
+    "torchaudio",
+    "lhotse",
+    "huggingface_hub",
+    "sentencepiece",
+]
+# HuggingFace dataset input source.
+hf = [
+    "datasets",
+]
+# Articulatory-feature distance (PFER) in compare mode.
+analysis = [
+    "panphon",
+]
+all = [
+    "onnxruntime",
+    "soundfile",
+    "librosa",
+    "lhotse",
+    "huggingface_hub",
+    "sentencepiece",
+    "datasets",
+    "panphon",
+]
+
+[project.scripts]
+zipa-cli = "zipa_cli.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["zipa_cli*"]
+
+[tool.pytest.ini_options]
+# Only collect this project's tests, not the vendored ZIPA training repo's tests.
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ZIPA Phone Viewer</title>
+<link rel="stylesheet" href="styles.css" />
+<!-- wavesurfer.js v7 (ESM via CDN) is imported in app.js -->
+</head>
+<body>
+<header>
+  <h1>ZIPA Phone Viewer</h1>
+  <p class="sub">
+    Load an audio file and one or more <code>align-json</code> transcripts
+    (produced by <code>zipa-cli decode --output-format align-json</code>) to
+    inspect decoded phonemes with timecodes, model by model.
+  </p>
+</header>
+
+<section class="controls">
+  <div class="control">
+    <label for="audioFile">1 · Audio file</label>
+    <input type="file" id="audioFile" accept="audio/*,.wav,.flac,.mp3,.ogg,.m4a" />
+  </div>
+  <div class="control">
+    <label for="alignFiles">2 · Alignment JSON(s)</label>
+    <input type="file" id="alignFiles" accept=".json,.jsonl,.ndjson,application/json" multiple />
+    <small>One or more <code>align-json</code> files (each may hold many utterances).</small>
+  </div>
+  <div class="control">
+    <label for="uttSelect">3 · Utterance</label>
+    <select id="uttSelect"></select>
+  </div>
+</section>
+
+<section class="toolbar">
+  <button id="playBtn" title="Play / pause (space)">▶ Play</button>
+  <button id="viewToggle" title="Toggle waveform / spectrogram">Spectrogram view</button>
+  <label class="zoom">Zoom
+    <input type="range" id="zoom" min="0" max="500" value="0" />
+  </label>
+  <span id="cursorTime" class="cursor-time">0.000 s</span>
+  <span id="status" class="status"></span>
+</section>
+
+<div id="waveform"></div>
+<div id="spectrogram"></div>
+<div id="timeline"></div>
+
+<section id="tiers" class="tiers"></section>
+
+<footer>
+  <details>
+    <summary>About timecodes &amp; the ONNX stride caveat</summary>
+    <p>
+      Phone times come from the model's greedy alignment. For the <b>ONNX CTC</b>
+      backend the frame stride is approximated (~20&nbsp;ms/frame; ~40&nbsp;ms for the
+      ONNX transducer); the <b>PyTorch</b> backend uses exact encoder lengths. Treat
+      ONNX timings as approximate and validate against a reference. See the project
+      README, section &ldquo;Caution: ONNX length heuristic&rdquo;.
+    </p>
+  </details>
+  <p class="muted">100% client-side — no audio or transcript leaves your browser.</p>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

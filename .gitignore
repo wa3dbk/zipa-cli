@@ -1,0 +1,47 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.so
+
+# ---- Virtual environments ----
+.venv/
+.venv*/
+venv/
+env/
+ENV/
+
+# ---- Packaging / tooling ----
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+
+# ---- LaTeX build artifacts ----
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc
+docs/*.synctex.gz
+docs/*.fls
+docs/*.fdb_latexmk
+
+# ---- zipa-cli runtime ----
+# Downloaded model weights and any local model cache
+.cache/
+*.onnx
+*.pth
+*.pt
+# (the bundled tokenizers in zipa/ipa_simplified are intentionally NOT ignored)
+
+# ---- OS ----
+.DS_Store
+Thumbs.db

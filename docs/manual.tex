@@ -1,0 +1,364 @@
+\documentclass[11pt,a4paper]{article}
+
+% ============================================================================
+% ZIPA-CLI User Manual
+% Build:  make            (uses latexmk)   ->  manual.pdf
+%   or:   pdflatex manual.tex  (run twice for the table of contents)
+% ============================================================================
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!55!black,
+  urlcolor=blue!55!black,
+  citecolor=blue!55!black,
+  pdftitle={ZIPA-CLI User Manual},
+  pdfauthor={zipa-cli}
+}
+
+\definecolor{codebg}{rgb}{0.96,0.96,0.96}
+\definecolor{codekw}{rgb}{0.10,0.20,0.55}
+\definecolor{codecm}{rgb}{0.30,0.45,0.30}
+
+\lstdefinestyle{shell}{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{codekw}\bfseries,
+  commentstyle=\color{codecm}\itshape,
+  breaklines=true,
+  columns=fullflexible,
+  frame=single,
+  rulecolor=\color{gray!40},
+  showstringspaces=false,
+  xleftmargin=6pt,
+  morekeywords={zipa-cli,decode,transcribe,models,compare,pip,python}
+}
+\lstset{style=shell}
+
+\newcommand{\cli}{\texttt{zipa-cli}}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{ZIPA-CLI User Manual}
+\lhead{\leftmark}
+\cfoot{\thepage}
+
+\titleformat{\section}{\Large\bfseries}{\thesection}{0.6em}{}
+
+\begin{document}
+
+% ----------------------------------------------------------------------------
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Huge\bfseries ZIPA-CLI\par}
+\vspace{0.6cm}
+{\Large Batch Phonetic Decoding with ZIPA Zipformer Models\par}
+\vspace{0.4cm}
+{\large User Manual\par}
+\vfill
+{\large ONNX \& PyTorch backends \quad$\cdot$\quad multi-format I/O \quad$\cdot$\quad
+timestamped alignment \quad$\cdot$\quad model comparison \quad$\cdot$\quad web viewer\par}
+\vspace{2cm}
+{\itshape Generated for the \cli{} package.\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{Introduction}
+\cli{} is a command-line tool for running \emph{greedy phonetic decoding} with the
+ZIPA family of zipformer phone-recognition models
+(\href{https://aclanthology.org/2025.acl-long.961/}{ACL 2025}). It wraps the model
+checkpoints in a single streaming pipeline so you can transcribe one file or millions
+without reloading the model, across many input formats, with either a
+minimal-dependency ONNX backend or the full PyTorch backend.
+
+\paragraph{Capabilities at a glance.}
+\begin{itemize}[nosep]
+  \item Inputs: single file, file list, directory, CommonVoice-style TSV, STM
+        segments, HuggingFace dataset, lhotse/icefall manifests, and lhotse shar.
+  \item Backends: \textbf{ONNX} (default, minimal deps) and \textbf{PyTorch}
+        (icefall/k2, GPU).
+  \item Outputs: \code{tsv}, \code{jsonl}, lhotse \code{manifest}, \code{recogs},
+        \code{stm}, \code{ctm}, and \code{align-json}.
+  \item Timestamped alignment, a two-model comparison mode (match/sub/ins/del, PER,
+        PFER), a model registry with HuggingFace auto-download, and a client-side web
+        viewer for phoneticians.
+\end{itemize}
+
+% ============================================================================
+\section{Installation}
+
+\subsection{Minimal (ONNX backend --- recommended)}
+\begin{lstlisting}
+pip install -e ".[onnx]"
+\end{lstlisting}
+Pulls \code{onnxruntime soundfile librosa lhotse huggingface\_hub sentencepiece}. No
+\code{torch}/\code{icefall}/\code{k2} required.
+
+\subsection{Full (PyTorch backend --- large-scale GPU)}
+\begin{lstlisting}
+pip install -e ".[torch]"
+# then install icefall + k2 matching your torch/cuda versions:
+#   https://icefall.readthedocs.io/en/latest/installation/index.html
+\end{lstlisting}
+
+\subsection{Optional extras}
+\begin{lstlisting}
+pip install -e ".[hf]"        # HuggingFace dataset input
+pip install -e ".[analysis]"  # panphon PFER in compare mode
+pip install -e ".[all]"       # everything
+\end{lstlisting}
+
+\subsection{Configuration}
+\begin{longtable}{@{}lll@{}}
+\toprule
+\textbf{Variable / flag} & \textbf{Meaning} & \textbf{Default} \\
+\midrule
+\endhead
+\code{ZIPA\_CLI\_CACHE} & model download cache & \code{\textasciitilde/.cache/zipa-cli} \\
+\code{ZIPA\_REPO} / \code{--zipa-repo} & path to the ZIPA training repo & auto-detected \\
+\code{--tokens} & ONNX \code{tokens.txt} & bundled \code{ipa\_simplified/tokens.txt} \\
+\code{--bpe-model} & PyTorch sentencepiece model & bundled \code{unigram\_127.model} \\
+\bottomrule
+\end{longtable}
+
+% ============================================================================
+\section{Models}
+\cli{} knows all 12 released averaged checkpoints by short tag.
+
+\begin{lstlisting}
+zipa-cli models list
+zipa-cli models info  zipa-cr-l-500k
+zipa-cli models download zipa-cr-s-300k --backend onnx --precision fp16
+\end{lstlisting}
+
+\begin{longtable}{@{}lll@{}}
+\toprule
+\textbf{Tag pattern} & \textbf{Architecture} & \textbf{Example} \\
+\midrule
+\endhead
+\code{zipa-t-\{s,l\}-\{300k,500k\}}    & transducer        & \code{zipa-t-l-500k} \\
+\code{zipa-cr-\{s,l\}-\{300k,500k\}}   & CR-CTC (ctc)      & \code{zipa-cr-s-300k} \\
+\code{zipa-cr-ns-\{s,l\}-\{700k,800k\}}& CR-CTC Ns         & \code{zipa-cr-ns-l-800k} \\
+\code{zipa-cr-ns-nd-\{s,l\}-\dots}     & CR-CTC Ns, no diacritics & \code{zipa-cr-ns-nd-l-780k} \\
+\bottomrule
+\end{longtable}
+
+Anywhere a model is required you may pass a \textbf{tag} (auto-downloaded and cached)
+or a \textbf{local path} (an \code{.onnx} file or transducer directory, or a
+\code{.pth} checkpoint).
+
+% ============================================================================
+\section{Quick start}
+\begin{lstlisting}
+# Single file (prints phones)
+zipa-cli transcribe sample.wav --model zipa-cr-s-300k
+
+# A directory of audio on GPU, dynamic batching, to a TSV
+zipa-cli decode --input audio_dir/ --input-type dir \
+    --model zipa-cr-l-500k --backend onnx \
+    --max-duration 600 -o transcripts.tsv
+
+# Compare two models' outputs
+zipa-cli decode --input audio_dir/ --model zipa-cr-s-300k -o small.tsv
+zipa-cli decode --input audio_dir/ --model zipa-cr-l-500k -o large.tsv
+zipa-cli compare --a small.tsv --b large.tsv
+\end{lstlisting}
+
+% ============================================================================
+\section{Input sources}
+Select with \code{--input-type}; \code{auto} (the default) infers from the path/flags.
+
+\begin{longtable}{@{}lll@{}}
+\toprule
+\textbf{Type} & \textbf{What it is} & \textbf{Key flags} \\
+\midrule
+\endhead
+\code{file} & one audio file & --- \\
+\code{list} & text file of audio paths & --- \\
+\code{dir} & directory searched recursively & --- \\
+\code{tsv} & id/path (+ ref) columns, CommonVoice-style & \code{--id-col --path-col --ref-col} \\
+\code{stm} & \code{file spk chan start end [text]} segments & \code{--audio-dir} \\
+\code{hf} & a HuggingFace dataset & \code{--hf-dataset --hf-split --hf-config} \\
+\code{manifest} & lhotse/icefall manifests & \code{--cuts} \emph{or} \code{--recordings --supervisions} \\
+\code{shar} & directory of lhotse shar shards & --- \\
+\bottomrule
+\end{longtable}
+
+\subsection{Examples}
+\begin{lstlisting}
+# CommonVoice TSV (segid -> clip)
+zipa-cli decode --input cv/test.tsv --input-type tsv \
+    --id-col path --path-col path --ref-col sentence \
+    --model zipa-cr-l-500k -o cv.tsv
+
+# STM segments + an audio directory
+zipa-cli decode --input show.stm --input-type stm --audio-dir audio/ \
+    --model zipa-cr-l-500k --output-format stm -o show.hyp.stm
+
+# HuggingFace dataset (streaming)
+zipa-cli decode --input-type hf --hf-dataset mozilla-foundation/common_voice_17_0 \
+    --hf-config en --hf-split test --audio-column audio \
+    --model zipa-cr-l-500k -o cv17_en.jsonl --output-format jsonl
+
+# icefall manifest (recordings + supervisions)
+zipa-cli decode --input-type manifest \
+    --recordings data/recordings.jsonl.gz --supervisions data/supervisions.jsonl.gz \
+    --model zipa-cr-l-500k -o hyp.manifest.jsonl --output-format manifest
+
+# Precomputed fbank cuts (feature extraction skipped automatically)
+zipa-cli decode --input-type manifest --cuts data/cuts.jsonl.gz \
+    --model zipa-cr-l-500k -o hyp.tsv
+
+# lhotse shar shards (cuts.*.jsonl.gz + recording.*.tar)
+zipa-cli decode --input data-shar/ --input-type shar \
+    --model zipa-cr-l-500k -o hyp.tsv
+\end{lstlisting}
+
+% ============================================================================
+\section{Output formats}
+\begin{longtable}{@{}ll@{}}
+\toprule
+\textbf{Format} & \textbf{Description} \\
+\midrule
+\endhead
+\code{tsv} (default) & \code{id<TAB>p h o n e s} \\
+\code{jsonl} & rich record per utterance (add \code{--timestamps} for an \code{alignment} field) \\
+\code{manifest} & lhotse \code{SupervisionSet}; round-trips into k2/lhotse \\
+\code{recogs} & \code{hyp=/ref=} lines parsed by \code{zipa/scripts/evaluate.py} \\
+\code{stm} & \code{file spk chan start end phones} \\
+\code{ctm} & NIST CTM: \code{recording channel start dur phone} (timed) \\
+\code{align-json} & one JSON line per utterance with timed phones; feeds the web viewer \\
+\bottomrule
+\end{longtable}
+
+When the input carries a reference (TSV \code{--ref-col}, STM text, manifest
+supervisions) it is preserved into \code{jsonl}/\code{recogs}/\code{align-json} for
+evaluation. \code{--skip-existing} resumes a run by appending only new ids.
+
+% ============================================================================
+\section{Batching, device, and precision}
+\begin{itemize}[nosep]
+  \item \code{--batch-size N} --- fixed utterances per batch, \emph{or}
+  \item \code{--max-duration S} --- dynamic, lhotse-style: cap pooled audio seconds
+        per batch (utterances length-sorted within a buffer to minimise padding).
+  \item \code{--num-workers N} --- audio/feature loading workers.
+  \item \code{--device auto|cpu|cuda|cuda:N} --- PyTorch device; ONNX uses the CUDA
+        execution provider automatically when available.
+  \item \code{--precision fp32|fp16|int8} --- ONNX precision to download/use.
+\end{itemize}
+
+% ============================================================================
+\section{Timestamps and alignment}
+\code{ctm} and \code{align-json} always emit per-phone \code{start}/\code{end} times;
+\code{--timestamps} additionally attaches an \code{alignment} array to \code{jsonl}.
+
+\begin{lstlisting}
+zipa-cli decode --input utt.wav --model zipa-cr-l-500k \
+    --output-format ctm -o utt.ctm
+
+zipa-cli decode --input audio_dir/ --input-type dir --model zipa-cr-l-500k \
+    --output-format align-json -o aligned.json
+\end{lstlisting}
+
+\begin{quote}\itshape
+\textbf{Caution.} Timestamped decoding currently requires the ONNX backend, and ONNX
+timings are approximate --- see Section~\ref{sec:caution}.
+\end{quote}
+
+% ============================================================================
+\section{Comparison / analysis mode}
+\begin{lstlisting}
+zipa-cli compare --a modelA.tsv --b modelB.tsv \
+    [--format txt|jsonl|csv] [--top-k 20] [-o report.txt]
+\end{lstlisting}
+Treats \textbf{A as reference} and \textbf{B as hypothesis}, joins by id, and reports:
+corpus and per-utterance \emph{Match / Substitution / Insertion / Deletion} counts,
+\textbf{PER} $=(S+I+D)/N_{\text{ref}}$, \textbf{PFER} (panphon articulatory feature
+edit distance; install \code{[analysis]}), the most frequent substitution pairs and
+inserted/deleted phones, and the most-disagreeing utterances. Inputs may be
+\code{tsv} or \code{jsonl} transcripts from \code{decode}.
+
+% ============================================================================
+\section{Web viewer for phoneticians}
+A zero-install, client-side viewer lives in \code{web/}. Produce \code{align-json}
+for each model, then serve the folder:
+\begin{lstlisting}
+zipa-cli decode --input utt.wav --model zipa-cr-l-500k --output-format align-json -o large.json
+zipa-cli decode --input utt.wav --model zipa-cr-s-300k --output-format align-json -o small.json
+cd web && python -m http.server 8000   # browse http://localhost:8000
+\end{lstlisting}
+Load the audio file and both JSON files; entries sharing an utterance id are stacked
+as one phone tier per model, positioned by timecode, over a waveform/spectrogram view.
+
+% ============================================================================
+\section{Caution: the ONNX length heuristic}\label{sec:caution}
+The two backends compute the number of decodable output frames differently,
+\emph{by design}.
+
+\begin{longtable}{@{}lll@{}}
+\toprule
+\textbf{Backend} & \textbf{Output-length source} & \textbf{Time stride / frame} \\
+\midrule
+\endhead
+ONNX CTC        & \code{feat\_lens // 2}, clipped to session output & $\approx 0.02$\,s \\
+ONNX transducer & \code{feat\_lens // 4}, clipped                   & $\approx 0.04$\,s \\
+PyTorch (both)  & exact \code{encoder\_out\_lens}                   & exact \\
+\bottomrule
+\end{longtable}
+
+Why \code{//2} for CTC when \code{subsampling\_factor} is 4? The CR-CTC head emits at
+roughly half the encoder stride, so its log-probs come out at $\sim$2$\times$ the
+encoder frame rate. The heuristic (carried verbatim from
+\code{inference/batch\_inference.py}) approximates only the \emph{trailing} valid
+length; it does not change the bulk of the emitted tokens but can clip or extend the
+last few frames and it sets the time stride used to place phones on the timeline.
+
+\paragraph{Recommendation.} On your first real ONNX CTC run, spot-check the
+transcript and any \code{--timestamps} alignment against a known reference (or against
+the PyTorch backend, which is exact). For precise timings prefer \code{--backend torch}.
+
+% ============================================================================
+\section{Faithfulness to the reference scripts}
+\begin{itemize}[nosep]
+  \item Features: 80-dim lhotse kaldi fbank (\code{dither=0.0, snip\_edges=False}),
+        mono, 16\,kHz --- identical to \code{inference/utils.py}.
+  \item Decoding is greedy everywhere (blank id 0; transducer context size 2, $\le$3
+        symbols/frame).
+  \item Tokenizers bound per backend: \code{tokens.txt} (ONNX) vs
+        \code{unigram\_127.model} (PyTorch).
+  \item Architecture/size come from the registry, not from string-matching the path.
+\end{itemize}
+
+% ============================================================================
+\section{Troubleshooting}
+\begin{longtable}{@{}p{0.42\textwidth}p{0.52\textwidth}@{}}
+\toprule
+\textbf{Symptom} & \textbf{Fix} \\
+\midrule
+\endhead
+\emph{Could not find tokens.txt} & Pass \code{--tokens} or set \code{--zipa-repo}/\code{\$ZIPA\_REPO}. \\
+\emph{No module named icefall} & PyTorch backend needs icefall+k2 installed separately. \\
+\emph{No transducer encoder/decoder/joiner ONNX files} & Wrong \code{--precision} or path; check \code{models info <tag>}. \\
+ONNX timings look off & Expected approximation; validate vs PyTorch (Section~\ref{sec:caution}). \\
+Web imports blocked & Serve over HTTP (\code{python -m http.server}); \code{file://} blocks ES modules. \\
+\bottomrule
+\end{longtable}
+
+\end{document}
